@@ -1,0 +1,151 @@
+---
+title: "HW5"
+format: html
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+```
+
+## Read and Modify Data
+
+We'll start with the d1 and d2 tables from the helper code.
+
+```{r}
+source("Data/student-merge.R")
+mat_tbl <- d1
+por_tbl <- d2
+
+full_tbl_1 <- inner_join(mat_tbl, por_tbl, by = c("school","sex","age","address","famsize","Pstatus","Medu","Fedu","Mjob","Fjob","reason","nursery","internet"))
+```
+We receive an unexpected many-to-many relationship warning.
+
+```{r}
+full_tbl_2 <- inner_join(mat_tbl, por_tbl, by = setdiff(names(mat_tbl), c("G1", "G2", "G3", "paid", "absences")))
+
+columns_of_interest <- c("reason", "guardian", "activities", "nursery")
+
+full_tbl_2 <- full_tbl_2 |> 
+  mutate(across(columns_of_interest, as.factor))
+```
+
+## Contingency Tables
+
+```{r}
+table(full_tbl_2$reason, useNA = "always")
+```
+
+We don't have any missing variables here, and these counts fit neatly into the definition. For example, 85 students chose this school for reputation.
+
+```{r}
+subset_tbl <- full_tbl_2 |> 
+  filter(reason == "reputation")
+
+table(subset_tbl$guardian, subset_tbl$nursery, useNA = "always")
+table(full_tbl_2$guardian, full_tbl_2$nursery, full_tbl_2$reason, useNA = "always")[,, "reputation"]
+```
+
+Here we see the same table produced both ways. Among those who chose the school for the reputation, 5 have the father as primary guardian and did not attend nursery school.
+
+```{r}
+full_tbl_2 |> 
+  group_by(guardian, nursery) |> 
+  summarize(count = n()) |> 
+  pivot_wider(names_from = nursery, values_from = count)
+```
+
+This one looks similar following the pivot. We have 16 total students who didn't attend nursery school with the father as the primary guardian.
+
+## Numeric EDA
+
+We'll use the math table, the Portuguese table, then both filtered.
+
+```{r}
+por_tbl |>  
+  summarise(across(c("absences", "age", "G3"), list("mean" = mean, "sd" = sd), .names = "{.fn}_{.col}"))
+por_tbl |> 
+  filter(nursery == "yes") |>  
+  summarise(across(c("absences", "age", "G3"), list("mean" = mean, "sd" = sd), .names = "{.fn}_{.col}"))
+```
+
+We can see the standard deviation of G3 among Portuguese students who attended nursery school is 3.28.
+
+```{r}
+mat_tbl |> 
+  group_by(nursery) |> 
+  summarise(across(c("absences", "age", "G3"), list("mean" = mean, "sd" = sd), .names = "{.fn}_{.col}"))
+
+mat_tbl |> 
+  group_by(nursery, reason) |> 
+  summarise(across(c("absences", "age", "G3"), list("mean" = mean, "sd" = sd), .names = "{.fn}_{.col}"))
+```
+
+The mean absences among math students who attended nursery school is 5.79. When subset further among students who also chose the school for course options, that number drops to 4.33.
+
+```{r}
+por_tbl |> 
+  select(age, absences, G1, G2, G3) |> 
+  cor()
+```
+
+We see that G2 and G3 are very correlated with a value of .92.
+
+```{r}
+plot_1_1 <- mat_tbl |> ggplot(aes(x = G3))
+plot_1_1 + geom_histogram(aes(fill = nursery), binwidth = 1) + ggtitle("Histogram of G3")
+
+plot_2_1 <- mat_tbl |> ggplot(aes(x = age))
+plot_2_1 + geom_histogram(aes(fill = nursery), binwidth = 1) + ggtitle("Histogram of Age")
+```
+
+These give us counts in each bin of the values that fall there for G3 and age.
+
+```{r}
+plot_1_2 <- mat_tbl |> ggplot(aes(x = G3))
+plot_1_2 + geom_density(aes(fill = nursery, alpha = .5)) + ggtitle("Density of G3")
+
+plot_2_2 <- mat_tbl |> ggplot(aes(x = age))
+plot_2_2 + geom_density(aes(fill = nursery, alpha = .5)) + ggtitle("Density of Age")
+```
+
+This smooths out the histogram, which doesn't work as well for discrete values like age.
+
+```{r}
+plot_1_3 <- mat_tbl |> ggplot(aes(x = G3))
+plot_1_3 + geom_boxplot(aes(fill = nursery)) + ggtitle("Boxplot of G3")
+
+plot_2_3 <- mat_tbl |> ggplot(aes(x = age))
+plot_2_3 + geom_boxplot(aes(fill = nursery)) + ggtitle("Boxplot of Age")
+```
+
+This shows us that the "heart" of each distribution is roughly similar in spread.
+
+```{r}
+plot_4_1 <- por_tbl |> ggplot(aes(x = G1, y = G3, color = activities))
+plot_4_1 + geom_point() + ggtitle("Plot of G3 vs G1")
+
+plot_4_2 <- por_tbl |> ggplot(aes(x = absences, y = G3, color = activities))
+plot_4_2 + geom_point() + ggtitle("Plot of G3 vs absences")
+```
+
+```{r}
+plot_5_1 <- por_tbl |> ggplot(aes(x = G1, y = G3))
+plot_5_1 + geom_point() + ggtitle("Plots of G3 vs G1 given nursery") + facet_wrap(~ nursery)
+
+plot_5_2 <- por_tbl |> ggplot(aes(x = absences, y = G3))
+plot_5_2 + geom_point() + ggtitle("Plots of G3 vs absences given nursery") + facet_wrap(~ nursery)
+```
+
+```{r}
+plot_5_1 <- por_tbl |> ggplot(aes(x = G1, y = G3))
+plot_5_1 + geom_point() + ggtitle("Plots of G3 vs G1 given nursery and guardian") + facet_wrap(nursery ~ guardian)
+
+plot_5_2 <- por_tbl |> ggplot(aes(x = absences, y = G3))
+plot_5_2 + geom_point() + ggtitle("Plots of G3 vs absences given nursery and guardian") + facet_wrap(nursery ~ guardian)
+```
+
+These plots let us pull out some trends. For example, in just about any scenario, we tend to see some increase of G3 with G1.
